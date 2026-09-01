@@ -1,0 +1,249 @@
+<?php
+session_start();
+
+if (!isset($_SESSION['usuario']) || $_SESSION['rol'] !== 'admin') {
+    header("Location: ../login.php");
+    exit;
+}
+
+/* OPERARIOS DE DEMOSTRACIÓN */
+$operarios = array(
+
+    array(
+        "id" => 1,
+        "nombre" => "Juan Pérez",
+        "usuario" => "jperez",
+        "estado" => "Activo"
+    ),
+
+    array(
+        "id" => 2,
+        "nombre" => "Martín Rodríguez",
+        "usuario" => "mrodriguez",
+        "estado" => "Activo"
+    ),
+
+    array(
+        "id" => 3,
+        "nombre" => "Santiago López",
+        "usuario" => "slopez",
+        "estado" => "Inactivo"
+    )
+
+);
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Operarios | Softyle</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    >
+
+    <link rel="stylesheet" href="../CSS/sistema.css">
+
+</head>
+
+<body class="sistema-body">
+
+<nav class="sistema-navbar">
+
+    <div class="navbar-brand-sistema">
+
+        <div class="navbar-logo">
+            <i class="bi bi-box-seam"></i>
+        </div>
+
+        <div>
+            <strong>SOFTYLE</strong>
+            <small>Panel administrativo</small>
+        </div>
+
+    </div>
+
+    <a href="dashboard.php" class="btn-logout">
+
+        <i class="bi bi-arrow-left"></i>
+
+    </a>
+
+</nav>
+
+
+<main class="admin-container">
+
+    <a href="dashboard.php" class="volver-link">
+
+        <i class="bi bi-arrow-left"></i>
+
+        Volver al panel
+
+    </a>
+
+
+    <section class="dashboard-header">
+
+        <span class="dashboard-label">
+            PERSONAL
+        </span>
+
+        <h1>Operarios</h1>
+
+        <p>
+            Gestioná los operarios que trabajan en el depósito.
+        </p>
+
+    </section>
+
+
+    <div class="admin-actions">
+
+        <a href="operario_agregar.php" class="btn-picking">
+
+            <i class="bi bi-person-plus"></i>
+
+            Agregar operario
+
+        </a>
+
+    </div>
+
+
+    <div class="admin-table-card">
+
+        <div class="table-responsive">
+
+            <table class="table align-middle">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Nombre</th>
+
+                        <th>Usuario</th>
+
+                        <th>Estado</th>
+
+                        <th>Acciones</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                <?php foreach ($operarios as $operario) { ?>
+
+                    <tr>
+
+                        <td>
+
+                            <strong>
+
+                                <?php
+                                echo htmlspecialchars(
+                                    $operario['nombre']
+                                );
+                                ?>
+
+                            </strong>
+
+                        </td>
+
+
+                        <td>
+
+                            <?php
+                            echo htmlspecialchars(
+                                $operario['usuario']
+                            );
+                            ?>
+
+                        </td>
+
+
+                        <td>
+
+                            <?php if ($operario['estado'] == "Activo") { ?>
+
+                                <span class="estado activo">
+                                    Activo
+                                </span>
+
+                            <?php } else { ?>
+
+                                <span class="estado">
+                                    Inactivo
+                                </span>
+
+                            <?php } ?>
+
+                        </td>
+
+
+                        <td>
+
+                            <a
+                                href="operario_perfil.php?id=<?php echo $operario['id']; ?>"
+                                class="btn btn-sm btn-info"
+                            >
+
+                                <i class="bi bi-person"></i>
+
+                            </a>
+
+
+                            <a
+                                href="operario_editar.php?id=<?php echo $operario['id']; ?>"
+                                class="btn btn-sm btn-primary"
+                            >
+
+                                <i class="bi bi-pencil"></i>
+
+                            </a>
+
+
+                            <a
+                                href="operario_eliminar.php?id=<?php echo $operario['id']; ?>"
+                                class="btn btn-sm btn-danger"
+                                onclick="return confirm('¿Seguro que querés eliminar este operario?');"
+                            >
+
+                                <i class="bi bi-trash"></i>
+
+                            </a>
+
+                        </td>
+
+                    </tr>
+
+                <?php } ?>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</main>
+
+</body>
+</html>
