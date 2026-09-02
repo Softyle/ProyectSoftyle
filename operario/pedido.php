@@ -6,7 +6,15 @@ if (!isset($_SESSION['usuario']) || $_SESSION['rol'] !== 'operario') {
     exit;
 }
 
-$pedido_id = $_GET['id'] ?? '1048';
+$pedido_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+require_once '../conexion.php';
+$stmt = $conexion->prepare("SELECT id, estado, total_productos FROM pedidos WHERE id = ? AND operario_id = ?");
+$stmt->bind_param('ii', $pedido_id, $_SESSION['usuario_id']);
+$stmt->execute();
+$resultado = $stmt->get_result();
+if ($resultado->num_rows !== 1) { $stmt->close(); header('Location: dashboard.php'); exit; }
+$pedido = $resultado->fetch_assoc();
+$stmt->close();
 ?>
 
 <!DOCTYPE html>
@@ -21,7 +29,7 @@ $pedido_id = $_GET['id'] ?? '1048';
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Pedido #<?= htmlspecialchars($pedido_id) ?> | Softyle</title>
+    <title>Pedido #<?php echo (int)$pedido_id; ?> | Softyle</title>
 
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
@@ -73,7 +81,7 @@ $pedido_id = $_GET['id'] ?? '1048';
     </span>
 
     <h1 class="pedido-detalle-title">
-        Pedido #<?= htmlspecialchars($pedido_id) ?>
+        Pedido #<?php echo (int)$pedido_id; ?>
     </h1>
 
 
@@ -101,7 +109,7 @@ $pedido_id = $_GET['id'] ?? '1048';
 
                 <span>
                     Productos
-                    <strong>5</strong>
+                    <strong><?php echo (int)$pedido['total_productos']; ?></strong>
                 </span>
             </div>
 
@@ -127,7 +135,7 @@ $pedido_id = $_GET['id'] ?? '1048';
 
 
         <a
-            href="picking.php?id=<?= htmlspecialchars($pedido_id) ?>"
+            href="picking.php?id=<?php echo (int)$pedido_id; ?>"
             class="btn-picking"
         >
             Comenzar picking
