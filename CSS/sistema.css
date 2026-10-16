@@ -1,3 +1,18 @@
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button {
+    visibility: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    right: 0 !important;
+}
+
 :root {
     --azul-oscuro: #142544;
     --azul: #3265B7;
