@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 27 18">
+<!-- Bandera de Uruguay (botón para volver al sitio en español) -->
+<rect width="27" height="18" fill="#fff"/>
+<g fill="#0038a8">
+<rect y="2" width="27" height="2"/>
+<rect y="6" width="27" height="2"/>
+<rect y="10" width="27" height="2"/>
+<rect y="14" width="27" height="2"/>
+</g>
+<rect width="13.5" height="10" fill="#fff"/>
+<!-- Sol de Mayo simplificado: 16 rayos y el disco -->
+<g transform="translate(6.75 5)" fill="#fcd116" stroke="#7b3f00" stroke-width="0.12">
+<g id="rayo"><path d="M-0.6 -1.9 L0 -4 L0.6 -1.9 Z"/></g>
+<use href="#rayo" transform="rotate(22.5)"/>
+<use href="#rayo" transform="rotate(45)"/>
+<use href="#rayo" transform="rotate(67.5)"/>
+<use href="#rayo" transform="rotate(90)"/>
+<use href="#rayo" transform="rotate(112.5)"/>
+<use href="#rayo" transform="rotate(135)"/>
+<use href="#rayo" transform="rotate(157.5)"/>
+<use href="#rayo" transform="rotate(180)"/>
+<use href="#rayo" transform="rotate(202.5)"/>
+<use href="#rayo" transform="rotate(225)"/>
+<use href="#rayo" transform="rotate(247.5)"/>
+<use href="#rayo" transform="rotate(270)"/>
+<use href="#rayo" transform="rotate(292.5)"/>
+<use href="#rayo" transform="rotate(315)"/>
+<use href="#rayo" transform="rotate(337.5)"/>
+<circle r="1.9"/>
+</g>
+</svg>

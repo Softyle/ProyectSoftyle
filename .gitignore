@@ -1,0 +1,10 @@
+# Usuarios y contraseñas de prueba: se entregan aparte, no van al repositorio público
+credenciales.txt
+
+# Archivos que suben los usuarios (fotos de perfil, documentos, mensajes)
+uploads/perfiles/*
+!uploads/perfiles/.gitkeep
+uploads/documentos/*
+!uploads/documentos/.htaccess
+uploads/mensajes/*
+!uploads/mensajes/.htaccess

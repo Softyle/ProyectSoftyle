@@ -1,0 +1,2 @@
+# Carpeta interna del patrón MVC: solo la usa index.php, no se abre desde el navegador.
+Require all denied

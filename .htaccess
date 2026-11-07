@@ -1,0 +1,9 @@
+# PICKFLOW - configuración de Apache para la raíz del proyecto
+# Toda la aplicación entra por index.php (controlador frontal).
+DirectoryIndex index.php
+Options -Indexes
+
+# El script de la base de datos y la documentación no se descargan desde el navegador
+<FilesMatch "\.(sql|md|txt|log)$">
+    Require all denied
+</FilesMatch>
