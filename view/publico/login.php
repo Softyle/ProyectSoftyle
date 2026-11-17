@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Iniciar sesión | PICKFLOW</title>
 <link rel="icon" href="img/logo3.png">
+<?php require RAIZ . '/view/layout/app_instalable.php'; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -58,10 +59,13 @@
             </form>
 
             <div class="login-info"><i class="bi bi-shield-check"></i> <span>Acceso exclusivo para personal autorizado</span></div>
+            <!-- Aparece solo si el navegador permite instalar PICKFLOW como app (js/pwa.js) -->
+            <button type="button" class="login-instalar btn-instalar-app" hidden><i class="bi bi-phone" aria-hidden="true"></i> Instalar PICKFLOW en este dispositivo</button>
             <a href="<?= e(url()) ?>" class="login-volver"><i class="bi bi-arrow-left"></i> Volver al sitio principal</a>
         </section>
     </div>
 </main>
 <script src="<?= e(recurso('js/login.js')) ?>"></script>
+<script src="<?= e(recurso('js/pwa.js')) ?>"></script>
 </body>
 </html>

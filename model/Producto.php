@@ -10,7 +10,7 @@ class Producto extends Modelo
     public function listar()
     {
         return $this->filas("SELECT p.id_producto AS id, p.Nombre AS nombre, CONCAT('P', LPAD(p.id_producto, 4, '0')) AS codigo,
-                                    c.nombre AS categoria,
+                                    p.codigo_barras, IF(p.foto_oculta, NULL, p.foto) AS foto, p.foto_oculta, c.nombre AS categoria,
                                     CONCAT(z.nombre, ' / ', u.pasillo, '-', u.estante, '-', u.posicion) AS ubicacion,
                                     p.stock_actual AS stock, p.stock_minimo AS minimo,
                                     (SELECT COUNT(*) FROM Documento_Producto d WHERE d.id_producto = p.id_producto) AS documentos
@@ -39,36 +39,111 @@ class Producto extends Modelo
                             WHERE p.id_producto = ?", 'i', [$id]);
     }
 
-    public function crear($nombre, $descripcion, $stock, $stockMinimo, $idCategoria, $idUbicacion)
+    /* Alta del producto. Sin código de barras se le asigna el código interno (20 + id),
+       que depende del id: por eso se guarda en la misma transacción, después del INSERT. */
+    public function crear($nombre, $descripcion, $stock, $stockMinimo, $idCategoria, $idUbicacion, $codigoBarras = '', $foto = '')
     {
-        return $this->insertar("INSERT INTO Producto (Nombre, descripcion, stock_actual, stock_minimo, estado_producto, id_categoria, id_ubicacion)
-                                VALUES (?, ?, ?, ?, 'Disponible', ?, ?)",
-            'ssiiii', [$nombre, $descripcion, $stock, $stockMinimo, $idCategoria, $idUbicacion]);
+        $this->iniciarTransaccion();
+        try {
+            $id = $this->insertar("INSERT INTO Producto (Nombre, descripcion, stock_actual, stock_minimo, estado_producto, id_categoria, id_ubicacion, codigo_barras, foto)
+                                   VALUES (?, ?, ?, ?, 'Disponible', ?, ?, ?, ?)",
+                'ssiiiiss', [$nombre, $descripcion, $stock, $stockMinimo, $idCategoria, $idUbicacion, $codigoBarras !== '' ? $codigoBarras : null, $foto !== '' ? $foto : null]);
+            if ($codigoBarras === '') {
+                $this->ejecutar("UPDATE Producto SET codigo_barras = ? WHERE id_producto = ?", 'si', [CodigoBarras::interno($id), $id]);
+            }
+            $this->confirmarTransaccion();
+            return $id;
+        } catch (Throwable $ex) {
+            $this->deshacerTransaccion();
+            throw $ex;
+        }
     }
 
-    public function actualizar($id, $nombre, $descripcion, $stock, $stockMinimo, $estado, $idCategoria, $idUbicacion)
+    /* Sin código de barras vuelve al código interno del producto */
+    /* $fotoOculta: la foto queda guardada pero no se muestra (lista, mapa y picking) hasta que se vuelva a activar */
+    public function actualizar($id, $nombre, $descripcion, $stock, $stockMinimo, $estado, $idCategoria, $idUbicacion, $codigoBarras = '', $foto = '', $fotoOculta = false)
     {
         return $this->ejecutar("UPDATE Producto SET Nombre = ?, descripcion = ?, stock_actual = ?, stock_minimo = ?, estado_producto = ?,
-                                       id_categoria = ?, id_ubicacion = ?
+                                       id_categoria = ?, id_ubicacion = ?, codigo_barras = ?, foto = ?, foto_oculta = ?
                                 WHERE id_producto = ?",
-            'ssiisiii', [$nombre, $descripcion, $stock, $stockMinimo, $estado, $idCategoria, $idUbicacion, $id]);
+            'ssiisiissii', [$nombre, $descripcion, $stock, $stockMinimo, $estado, $idCategoria, $idUbicacion,
+                $codigoBarras !== '' ? $codigoBarras : CodigoBarras::interno($id), $foto !== '' ? $foto : null, $fotoOculta ? 1 : 0, $id]);
     }
 
-    /* Veces que el producto aparece en pedidos o en movimientos de stock */
+    /* Proveedor habitual del producto (0 = ninguno) */
+    public function asignarProveedor($id, $idProveedor)
+    {
+        return $this->ejecutar("UPDATE Producto SET id_proveedor = ? WHERE id_producto = ?", 'ii', [$idProveedor ?: null, $id]);
+    }
+
+    /* Al pedirle un producto a un proveedor por primera vez, queda como su proveedor habitual */
+    public function asignarProveedorSiNoTiene($id, $idProveedor)
+    {
+        return $this->ejecutar("UPDATE Producto SET id_proveedor = ? WHERE id_producto = ? AND id_proveedor IS NULL", 'ii', [$idProveedor, $id]);
+    }
+
+    /* Zonas donde está guardada cada categoría, de la que más productos tiene a la que menos.
+       Sirve para proponer una ubicación libre en la zona que corresponde. */
+    public function zonasPorCategoria()
+    {
+        $zonas = [];
+        foreach ($this->filas("SELECT p.id_categoria, u.id_zona, z.tipo, z.id_deposito, COUNT(*) AS productos
+                               FROM Producto p
+                               JOIN Ubicacion u ON u.id_ubicacion = p.id_ubicacion
+                               JOIN Zona z ON z.id_zona = u.id_zona
+                               GROUP BY p.id_categoria, u.id_zona, z.tipo, z.id_deposito
+                               ORDER BY p.id_categoria, productos DESC") as $f) {
+            $zonas[(int)$f['id_categoria']][] = ['id_zona' => (int)$f['id_zona'], 'tipo' => $f['tipo'], 'id_deposito' => (int)$f['id_deposito']];
+        }
+        return $zonas;
+    }
+
+    /* true si otro producto ya usa ese código de barras */
+    public function existeCodigoBarras($codigo, $excluirId = 0)
+    {
+        return (int)$this->valor("SELECT COUNT(*) FROM Producto WHERE codigo_barras = ? AND id_producto <> ?", 'si', [$codigo, $excluirId]) > 0;
+    }
+
+    /* Producto que corresponde a un código de barras, con su zona y su ubicación (lectura del operario) */
+    public function buscarPorCodigoBarras($codigo)
+    {
+        return $this->fila("SELECT p.id_producto, p.Nombre, p.codigo_barras, p.foto, z.nombre AS zona, z.tipo AS tipo_zona, u.pasillo, u.estante, u.posicion
+                            FROM Producto p
+                            INNER JOIN Ubicacion u ON u.id_ubicacion = p.id_ubicacion
+                            INNER JOIN Zona z ON z.id_zona = u.id_zona
+                            WHERE p.codigo_barras = ?", 's', [$codigo]);
+    }
+
+    /* Hoja de etiquetas: productos con su código y dónde se guardan (por zona y ubicación) */
+    public function etiquetas()
+    {
+        return $this->filas("SELECT p.id_producto, p.Nombre, p.codigo_barras, z.nombre AS zona, u.pasillo, u.estante, u.posicion
+                             FROM Producto p
+                             INNER JOIN Ubicacion u ON u.id_ubicacion = p.id_ubicacion
+                             INNER JOIN Zona z ON z.id_zona = u.id_zona
+                             ORDER BY z.nombre, u.pasillo, u.estante, u.posicion");
+    }
+
+    /* Veces que el producto aparece en pedidos, picking, recepciones (lotes),
+       órdenes de compra o conteos: con alguno de esos no se puede borrar */
     public function usos($id)
     {
-        return (int)$this->valor("SELECT (SELECT COUNT(*) FROM Tiene WHERE id_producto = ?) + (SELECT COUNT(*) FROM Registra WHERE id_producto = ?)",
-            'ii', [$id, $id]);
+        return (int)$this->valor("SELECT (SELECT COUNT(*) FROM Tiene WHERE id_producto = ?) + (SELECT COUNT(*) FROM Registra WHERE id_producto = ?)
+                                       + (SELECT COUNT(*) FROM Lote WHERE id_producto = ?) + (SELECT COUNT(*) FROM Orden_Compra_Detalle WHERE id_producto = ?)
+                                       + (SELECT COUNT(*) FROM Conteo_Detalle WHERE id_producto = ?)",
+            'iiiii', [$id, $id, $id, $id, $id]);
     }
 
-    /* Borra el producto y su documentación. Las notificaciones viejas se conservan
-       sin el vínculo al producto. Devuelve true si el producto existía. */
+    /* Borra el producto, su documentación y su historial de stock (si llegó acá,
+       ese historial solo tiene el stock inicial o ajustes manuales). Las notificaciones
+       viejas se conservan sin el vínculo al producto. Devuelve true si el producto existía. */
     public function eliminar($id)
     {
         $this->iniciarTransaccion();
         try {
             $this->ejecutar("UPDATE Notificacion SET id_producto = NULL WHERE id_producto = ?", 'i', [$id]);
             $this->ejecutar("DELETE FROM Documento_Producto WHERE id_producto = ?", 'i', [$id]);
+            $this->ejecutar("DELETE FROM Movimiento_Stock WHERE id_producto = ?", 'i', [$id]);
             $borrado = $this->ejecutar("DELETE FROM Producto WHERE id_producto = ?", 'i', [$id]) === 1;
             $this->confirmarTransaccion();
             return $borrado;
@@ -87,8 +162,10 @@ class Producto extends Modelo
     public function listarConZona()
     {
         $productos = [];
-        foreach ($this->filas("SELECT p.id_producto, p.Nombre, p.estado_producto, z.nombre AS zona, z.tipo FROM Producto p
+        foreach ($this->filas("SELECT p.id_producto, p.Nombre, p.estado_producto, z.nombre AS zona, z.tipo, COALESCE(c.nombre, 'Sin categoría') AS categoria
+                               FROM Producto p
                                INNER JOIN Ubicacion u ON u.id_ubicacion = p.id_ubicacion INNER JOIN Zona z ON z.id_zona = u.id_zona
+                               LEFT JOIN Categoria c ON c.id_categoria = p.id_categoria
                                ORDER BY p.Nombre") as $fila) {
             $productos[(int)$fila['id_producto']] = $fila;
         }
@@ -159,7 +236,7 @@ class Producto extends Modelo
     /* Productos del inventario con su ubicación y las unidades reservadas por pedidos sin recoger */
     public function inventario()
     {
-        return $this->filas("SELECT p.id_producto, p.Nombre, p.stock_actual, p.stock_minimo, p.estado_producto, c.nombre AS categoria,
+        return $this->filas("SELECT p.id_producto, p.Nombre, p.foto, p.stock_actual, p.stock_minimo, p.estado_producto, c.nombre AS categoria,
                                     u.id_zona, u.pasillo, u.estante, u.posicion,
                                     COALESCE((SELECT SUM(t.Cantidad) FROM Tiene t INNER JOIN Pedido pe ON pe.id_pedido = t.id_pedido
                                               WHERE t.id_producto = p.id_producto AND t.recogido = FALSE

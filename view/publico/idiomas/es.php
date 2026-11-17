@@ -128,12 +128,12 @@ return [
     'equipo_contacto' => 'CONTACTO',
     'equipo_ubicacion' => 'UBICACIÓN',
     'equipo_redes' => 'REDES DEL EQUIPO',
-    'equipo_redes_aria' => '%s del equipo Pickflow',
+    'equipo_redes_aria' => '%s del equipo Softyle',
     'mapa_titulo' => 'Mapa: ubicación de %s',
 
     // Pie
     'pie_lema' => 'Picking asistido',
-    'pie_texto' => 'Proyecto de organización logística',
+    'pie_texto' => 'Un producto de Softyle · Proyecto de organización logística',
 
     // Resultado del formulario de contacto
     'res_titulo_error' => 'Error',

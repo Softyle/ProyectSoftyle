@@ -25,6 +25,8 @@ class AdminController extends Controlador
             'prioridadOro' => (new Producto())->criticosPorZona(),
             'prioridadPlata' => $pedidos->enPicking(),
             'prioridadBronce' => $pedidos->completadosRecientes(),
+            'vencimientos' => (new Lote())->resumen(),
+            'conteosEnCurso' => (new Conteo())->contarEnCurso(),
         ]);
     }
 }

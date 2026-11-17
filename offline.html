@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#142544">
+<title>Sin conexión | PICKFLOW</title>
+<!-- Página que muestra la app instalada cuando no hay internet (sw.js).
+     Todo va acá adentro: sin conexión no se pueden pedir otros archivos. -->
+<style>
+    :root { --navy: #142544; --verde: #20C95A; --texto-2: #52627A; }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #F3F6FA; color: var(--navy);
+    }
+    .caja { width: 100%; max-width: 420px; text-align: center; background: #fff; border-radius: 18px; padding: 32px 24px; box-shadow: 0 10px 30px rgba(20, 37, 68, .08); }
+    img { width: 72px; height: 72px; border-radius: 18px; }
+    h1 { font-size: 1.4rem; margin: 18px 0 8px; }
+    p { margin: 0 0 12px; color: var(--texto-2); line-height: 1.5; }
+    button {
+        margin-top: 12px; width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: var(--verde);
+        color: var(--navy); font: inherit; font-weight: 700; font-size: 1rem; cursor: pointer;
+    }
+    button:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+    .estado { margin-top: 14px; font-size: .9rem; }
+</style>
+</head>
+<body>
+<main class="caja">
+    <img src="img/app/icono-192.png" alt="PICKFLOW">
+    <h1>Sin conexión a internet</h1>
+    <p>PICKFLOW necesita internet para trabajar con el depósito: los pedidos, el stock y los conteos están en el servidor.</p>
+    <p>Revisá el wifi o los datos del celular y volvé a intentar.</p>
+    <button type="button" onclick="location.reload()">Reintentar</button>
+    <p class="estado" id="estado" role="status"></p>
+</main>
+<script>
+    // Cuando vuelve la conexión, se recarga solo
+    window.addEventListener('online', function () {
+        document.getElementById('estado').textContent = 'Volvió la conexión. Cargando…';
+        location.reload();
+    });
+</script>
+</body>
+</html>

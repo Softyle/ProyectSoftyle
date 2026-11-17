@@ -14,7 +14,10 @@ require RAIZ . '/view/layout/cabecera.php';
         <h1>Productos</h1>
         <p>Gestioná los productos almacenados en el depósito.</p>
     </div>
-    <a href="<?= e(url('producto', 'agregar')) ?>" class="btn btn-success"><i class="bi bi-plus-circle"></i> Agregar producto</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="<?= e(url('producto', 'etiquetas')) ?>" class="btn btn-outline-primary"><i class="bi bi-upc"></i> Etiquetas con código de barras</a>
+        <a href="<?= e(url('producto', 'agregar')) ?>" class="btn btn-success"><i class="bi bi-plus-circle"></i> Agregar producto</a>
+    </div>
 </section>
 
 <?php if ($mensaje !== '') { ?><div class="alert alert-success" role="status"><?= e($mensaje) ?></div><?php } ?>
@@ -41,9 +44,9 @@ require RAIZ . '/view/layout/cabecera.php';
                 <tr><td colspan="6" class="text-center">No hay productos registrados.</td></tr>
             <?php } ?>
             <?php foreach ($productos as $p) { ?>
-                <tr data-nombre="<?= e(mb_strtolower($p['nombre'] . ' ' . $p['codigo'])) ?>" data-categoria="<?= e($p['categoria']) ?>">
-                    <td><strong><?= e($p['nombre']) ?></strong></td>
-                    <td><?= e($p['codigo']) ?></td>
+                <tr data-nombre="<?= e(mb_strtolower($p['nombre'] . ' ' . $p['codigo'] . ' ' . $p['codigo_barras'])) ?>" data-categoria="<?= e($p['categoria']) ?>">
+                    <td><div class="producto-con-foto"><?= miniaturaProducto($p['foto'], $p['nombre']) ?><span><strong><?= e($p['nombre']) ?></strong><?php if (!empty($p['foto_oculta'])) { ?><small class="d-block text-secondary"><i class="bi bi-eye-slash" aria-hidden="true"></i> Foto oculta</small><?php } ?></span></div></td>
+                    <td><?= e($p['codigo']) ?><?php if ($p['codigo_barras']) { ?><br><small class="text-secondary text-nowrap"><i class="bi bi-upc" aria-hidden="true"></i> <?= e($p['codigo_barras']) ?></small><?php } ?></td>
                     <td><?= e($p['categoria']) ?></td>
                     <td><?= e($p['ubicacion']) ?></td>
                     <td>
@@ -55,6 +58,7 @@ require RAIZ . '/view/layout/cabecera.php';
                         <small class="text-secondary">mín. <?= (int)$p['minimo'] ?></small>
                     </td>
                     <td class="text-nowrap">
+                        <a href="<?= e(url('producto', 'historial', ['id' => $p['id']])) ?>" class="btn btn-sm btn-outline-secondary" title="Historial de stock y lotes" aria-label="Historial de stock de <?= e($p['nombre']) ?>"><i class="bi bi-clock-history"></i></a>
                         <a href="<?= e(url('producto', 'documentos', ['id' => $p['id']])) ?>" class="btn btn-sm btn-outline-secondary" title="Documentación técnica" aria-label="Documentación técnica"><i class="bi bi-file-earmark-text"></i><?= (int)$p['documentos'] > 0 ? ' ' . (int)$p['documentos'] : '' ?></a>
                         <a href="<?= e(url('producto', 'editar', ['id' => $p['id']])) ?>" class="btn btn-sm btn-primary" title="Editar" aria-label="Editar <?= e($p['nombre']) ?>"><i class="bi bi-pencil"></i></a>
                         <form method="POST" action="<?= e(url('producto', 'eliminar')) ?>" class="d-inline" onsubmit="return confirm('¿Seguro que querés eliminar este producto?');">

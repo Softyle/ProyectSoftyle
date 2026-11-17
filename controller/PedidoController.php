@@ -55,6 +55,30 @@ class PedidoController extends Controlador
         $volver('mensaje', 'Pedido #' . $idPedido . ' asignado correctamente.');
     }
 
+    /* Le saca un pedido (Pendiente o En Picking) al operario: queda pendiente sin asignar
+       y lo que ya había retirado vuelve al stock */
+    public function quitar()
+    {
+        $estado = in_array($_POST['estado'] ?? '', self::FILTROS, true) ? $_POST['estado'] : 'Todos';
+        $volver = fn($clave, $texto) => $this->redirigir('pedido', 'index', ['estado' => $estado, $clave => $texto]);
+
+        if (!$this->esPost() || !$this->csrfValido()) {
+            $volver('error', 'La sesión del formulario venció. Actualizá la página e intentá de nuevo.');
+        }
+        $idPedido = (int)($_POST['pedido_id'] ?? 0);
+        try {
+            $repuestas = (new Pedido())->quitarOperario($idPedido);
+        } catch (RuntimeException $ex) {
+            $volver('error', $ex->getMessage());
+        } catch (mysqli_sql_exception $ex) {
+            error_log('PICKFLOW quitar pedido: ' . $ex->getMessage());
+            $volver('error', 'No se pudo quitar el pedido al operario. No se modificó nada.');
+        }
+        $volver('mensaje', 'Pedido #' . $idPedido . ' quitado al operario: quedó pendiente para asignarlo de nuevo.'
+            . ($repuestas === 1 ? ' La unidad que ya había retirado volvió al stock.'
+              : ($repuestas > 1 ? ' Las ' . $repuestas . ' unidades que ya había retirado volvieron al stock.' : '')));
+    }
+
     /* Generación de pedidos: cliente, productos y cantidades. Se valida el stock
        disponible y el pedido entra como "Pendiente" hasta que se asigne. */
     public function nuevo()

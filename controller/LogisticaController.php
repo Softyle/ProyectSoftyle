@@ -2,11 +2,13 @@
 /* =====================================================
    CONTROLADOR - CENTRO LOGÍSTICO (administrador)
    CRUD de zonas y ubicaciones (una sola pantalla:
-   ?tipo=zonas | ubicaciones) e inventario por zona.
+   ?tipo=zonas | ubicaciones), mapa del depósito e
+   inventario por zona.
 ===================================================== */
 class LogisticaController extends Controlador
 {
     const FILTROS_INVENTARIO = ['Todas', 'Refrigerada', 'Seca', 'Voluminosa', 'Alertas'];
+    const ZONAS_POR_PAGINA = 6;   // mapa del depósito: desde la séptima zona aparece la página 2
 
     public function __construct()
     {
@@ -129,6 +131,60 @@ class LogisticaController extends Controlador
             return 'Ya existe la ubicación ' . $v['pasillo'] . '-' . $v['estante'] . '-' . $v['posicion'] . '.';
         }
         return '';
+    }
+
+    /* Mapa del depósito: cada zona con sus productos y cantidades, en rojo si alguno
+       está en el stock mínimo. Se arma con las zonas de la base, así que crece o se
+       achica solo cuando se crean o se borran zonas; 6 zonas por página. */
+    public function mapa()
+    {
+        $zonas = [];
+        foreach ((new Zona())->conTotales() as $z) {
+            $z['pasillos'] = [];
+            $zonas[(int)$z['id_zona']] = $z;
+        }
+        // Plano: zona -> pasillo -> estantería -> nivel -> productos (los niveles vacíos también se dibujan)
+        foreach ((new Ubicacion())->planoConProductos() as $u) {
+            $idZona = (int)$u['id_zona'];
+            if (!isset($zonas[$idZona])) {
+                continue;
+            }
+            [$p, $e, $n] = [$u['pasillo'], $u['estante'], $u['posicion']];
+            $pasillos = &$zonas[$idZona]['pasillos'];
+            if (!isset($pasillos[$p])) {
+                $pasillos[$p] = ['estantes' => [], 'productos' => 0, 'alertas' => 0];
+            }
+            if (!isset($pasillos[$p]['estantes'][$e])) {
+                $pasillos[$p]['estantes'][$e] = ['niveles' => [], 'productos' => 0, 'alertas' => 0];
+            }
+            if (!isset($pasillos[$p]['estantes'][$e]['niveles'][$n])) {
+                $pasillos[$p]['estantes'][$e]['niveles'][$n] = [];
+            }
+            if ($u['id_producto'] !== null) {
+                $u['alerta'] = (int)$u['stock_actual'] <= (int)$u['stock_minimo'];
+                $pasillos[$p]['estantes'][$e]['niveles'][$n][] = $u;
+                $pasillos[$p]['estantes'][$e]['productos']++;
+                $pasillos[$p]['productos']++;
+                if ($u['alerta']) {
+                    $pasillos[$p]['estantes'][$e]['alertas']++;
+                    $pasillos[$p]['alertas']++;
+                }
+            }
+            unset($pasillos);
+        }
+        // En orden alfabético (Zona A, B, C...), sin importar el depósito
+        usort($zonas, fn($a, $b) => strnatcasecmp($a['nombre'], $b['nombre']));
+
+        $totalPaginas = max(1, (int)ceil(count($zonas) / self::ZONAS_POR_PAGINA));
+        $pagina = min(max(1, (int)($_GET['pagina'] ?? 1)), $totalPaginas);
+        $this->vista('admin/mapa', [
+            'zonas' => array_slice($zonas, ($pagina - 1) * self::ZONAS_POR_PAGINA, self::ZONAS_POR_PAGINA),
+            'pagina' => $pagina,
+            'totalPaginas' => $totalPaginas,
+            'totalZonas' => count($zonas),
+            'zonasPorPagina' => self::ZONAS_POR_PAGINA,
+            'iconosZona' => ['refrigerada' => 'bi-snow', 'seca' => 'bi-sun', 'voluminosa' => 'bi-boxes'],
+        ]);
     }
 
     /* Inventario por zona: stock de cada producto y alertas de reposición */

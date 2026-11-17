@@ -153,6 +153,7 @@ class Pedido extends Modelo
                 $retirada = (int)$it['retirada'];
                 if ($retirada > 0) {
                     $this->ejecutar("UPDATE Producto SET stock_actual = stock_actual + ? WHERE id_producto = ?", 'ii', [$retirada, $idProducto]);
+                    (new Lote())->devolver($idProducto, $retirada);
                     $movimientos->registrar($actual['ci_operario'], $idProducto, $it['pasillo'] . '-' . $it['estante'] . '-' . $it['posicion'],
                         'Devolución', $idPedido, $retirada);
                 }
@@ -160,6 +161,43 @@ class Pedido extends Modelo
             }
             $this->ejecutar("UPDATE Pedido SET estado = 'En Picking', recogido = FALSE WHERE id_pedido = ?", 'i', [$idPedido]);
             $this->confirmarTransaccion();
+        } catch (Throwable $ex) {
+            $this->deshacerTransaccion();
+            throw $ex;
+        }
+    }
+
+    /* Le saca el pedido al operario (Pendiente o En Picking): vuelve a "Pendiente"
+       sin asignar. Lo que ya había retirado vuelve al stock y queda registrado como
+       devolución. Devuelve las unidades repuestas.
+       Lanza RuntimeException si el pedido no tiene operario o ya pasó a validación. */
+    public function quitarOperario($idPedido)
+    {
+        $this->iniciarTransaccion();
+        try {
+            $actual = $this->fila("SELECT estado, ci_operario FROM Pedido WHERE id_pedido = ? FOR UPDATE", 'i', [$idPedido]);
+            if (!$actual || $actual['ci_operario'] === null || !in_array($actual['estado'], ['Pendiente', 'En Picking'], true)) {
+                throw new RuntimeException('Ese pedido ya no está asignado a un operario o ya pasó a validación. Actualizá la página.');
+            }
+            [, $items] = $this->detalle($idPedido);
+            $movimientos = new Movimiento();
+            $repuestas = 0;
+            foreach ($items as $it) {
+                $retirada = (int)$it['retirada'];
+                if ($retirada > 0) {
+                    $idProducto = (int)$it['id_producto'];
+                    $this->ejecutar("UPDATE Producto SET stock_actual = stock_actual + ? WHERE id_producto = ?", 'ii', [$retirada, $idProducto]);
+                    (new Lote())->devolver($idProducto, $retirada);
+                    $movimientos->registrar($actual['ci_operario'], $idProducto, $it['pasillo'] . '-' . $it['estante'] . '-' . $it['posicion'],
+                        'Devolución', $idPedido, $retirada);
+                    $repuestas += $retirada;
+                }
+            }
+            $this->ejecutar("UPDATE Tiene SET recogido = FALSE WHERE id_pedido = ?", 'i', [$idPedido]);
+            $this->ejecutar("UPDATE Pedido SET estado = 'Pendiente', recogido = FALSE, ci_operario = NULL, fecha_inicio_picking = NULL
+                             WHERE id_pedido = ?", 'i', [$idPedido]);
+            $this->confirmarTransaccion();
+            return $repuestas;
         } catch (Throwable $ex) {
             $this->deshacerTransaccion();
             throw $ex;

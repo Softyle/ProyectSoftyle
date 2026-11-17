@@ -58,6 +58,20 @@ class Zona extends Modelo
         return $this->ejecutar("DELETE FROM Zona WHERE id_zona = ?", 'i', [$id]);
     }
 
+    /* Para elegir qué zona contar: zonas con productos, cuándo se contaron por última vez
+       y si ya tienen un conteo abierto */
+    public function listarConProductos()
+    {
+        return $this->filas("SELECT z.id_zona, z.nombre, z.tipo, COUNT(p.id_producto) AS productos,
+                                    (SELECT MAX(c.fecha_cierre) FROM Conteo c WHERE c.id_zona = z.id_zona AND c.estado = 'Cerrado') AS ultimo_conteo,
+                                    (SELECT COUNT(*) FROM Conteo c WHERE c.id_zona = z.id_zona AND c.estado = 'En curso') AS en_curso
+                             FROM Zona z
+                             JOIN Ubicacion u ON u.id_zona = z.id_zona
+                             JOIN Producto p ON p.id_ubicacion = u.id_ubicacion
+                             GROUP BY z.id_zona, z.nombre, z.tipo
+                             ORDER BY z.nombre");
+    }
+
     /* Inventario: zonas con cantidad de productos, stock total y alertas */
     public function conTotales()
     {

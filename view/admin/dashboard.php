@@ -22,6 +22,25 @@ require RAIZ . '/view/layout/cabecera.php';
     </div>
 <?php } ?>
 
+<?php if ($vencimientos['vencidos'] > 0 || $vencimientos['por_vencer'] > 0) { ?>
+    <div class="aviso-validar aviso-vencimiento" role="status">
+        <i class="bi bi-calendar2-x" aria-hidden="true"></i>
+        <span>
+            <?php if ($vencimientos['vencidos'] > 0) { ?><strong><?= $vencimientos['vencidos'] ?> <?= $vencimientos['vencidos'] === 1 ? 'lote vencido' : 'lotes vencidos' ?></strong> para dar de baja<?php } ?>
+            <?= $vencimientos['vencidos'] > 0 && $vencimientos['por_vencer'] > 0 ? ' · ' : '' ?>
+            <?php if ($vencimientos['por_vencer'] > 0) { ?><strong><?= $vencimientos['por_vencer'] ?> <?= $vencimientos['por_vencer'] === 1 ? 'lote vence' : 'lotes vencen' ?></strong> en los próximos <?= Lote::DIAS_AVISO ?> días<?php } ?>
+        </span>
+        <a class="btn btn-sm btn-danger ms-auto" href="<?= e(url('recepcion', 'vencimientos', ['dias' => Lote::DIAS_AVISO])) ?>">Ver vencimientos</a>
+    </div>
+<?php } ?>
+<?php if ($conteosEnCurso > 0) { ?>
+    <div class="aviso-validar aviso-conteo" role="status">
+        <i class="bi bi-clipboard-data" aria-hidden="true"></i>
+        <span><strong><?= $conteosEnCurso ?> <?= $conteosEnCurso === 1 ? 'conteo de inventario' : 'conteos de inventario' ?></strong> en curso</span>
+        <a class="btn btn-sm btn-outline-primary ms-auto" href="<?= e(url('conteo')) ?>">Ver conteos</a>
+    </div>
+<?php } ?>
+
 <!-- Tablero de prioridades: Oro (crítico), Plata (en proceso), Bronce (completado).
      Si una no tiene nada, queda chica: solo el título y el contador en 0. -->
 <section class="row g-3" aria-label="Tablero de prioridades">
@@ -40,7 +59,7 @@ require RAIZ . '/view/layout/cabecera.php';
                         <li><span class="resumen-dato"><?= e($o['zona']) ?></span><span class="resumen-texto"><?= e($o['detalle']) ?></span></li>
                     <?php } ?>
                 </ul>
-                <a class="resumen-enlace" href="<?= e(url('logistica', 'inventario', ['filtro' => 'Alertas'])) ?>">Ver inventario <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                <a class="resumen-enlace" href="<?= e(url('compra', 'reposicion')) ?>">Reponer stock <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
             <?php } ?>
         </article>
     </div>
@@ -88,38 +107,27 @@ require RAIZ . '/view/layout/cabecera.php';
     </div>
 </section>
 
-<!-- Accesos rápidos (las mismas opciones del menú lateral, agrupadas). Cada tarjeta mide lo que su contenido. -->
-<section class="row g-3 mt-1 align-items-start">
-    <div class="col-xl-4 col-md-6">
+<!-- Accesos rápidos: se arman con la misma lista del menú lateral ($menuLateral, de cabecera.php),
+     así siempre tienen las mismas opciones y grupos. Se saltea "Panel de control" porque es esta página. -->
+<?php
+$iconosGrupo = ['General' => 'bi-bar-chart-line', 'Pedidos' => 'bi-list-check', 'Centro logístico' => 'bi-grid-3x3-gap',
+                'Personal' => 'bi-people', 'Control ambiental' => 'bi-thermometer-snow', 'Abastecimiento' => 'bi-truck'];
+?>
+<section class="accesos-grupos mt-3" aria-label="Accesos rápidos">
+    <?php foreach ($menuLateral as $grupo => $opciones) {
+        $opciones = array_filter($opciones, fn($o) => $o[0] !== $seccion);
+        if (!$opciones) {
+            continue;
+        }
+    ?>
         <div class="tarjeta tarjeta-accesos">
-            <h2 class="tarjeta-titulo"><i class="bi bi-list-check"></i> Gestión de pedidos</h2>
-                        <div class="accesos">
-                <a href="<?= e(url('pedido', 'nuevo')) ?>"><i class="bi bi-plus-circle"></i> Crear pedido</a>
-                <a href="<?= e(url('pedido')) ?>"><i class="bi bi-list-check"></i> Ver pedidos</a>
-                <a href="<?= e(url('seguimiento')) ?>"><i class="bi bi-person-workspace"></i> Operarios y hojas de ruta</a>
-                <a href="<?= e(url('cronograma')) ?>"><i class="bi bi-calendar-week"></i> Cronograma de despachos</a>
-                <a href="<?= e(url('api', 'simulador')) ?>"><i class="bi bi-send"></i> Simular pedido externo</a>
+            <h2 class="tarjeta-titulo"><i class="bi <?= e($iconosGrupo[$grupo] ?? 'bi-grid') ?>" aria-hidden="true"></i> <?= e($grupo) ?></h2>
+            <div class="accesos">
+                <?php foreach ($opciones as [$clave, $controlador, $accion, $parametros, $icono, $texto]) { ?>
+                    <a href="<?= e(url($controlador, $accion, $parametros)) ?>"><i class="bi <?= e($icono) ?>" aria-hidden="true"></i> <?= e($texto) ?></a>
+                <?php } ?>
             </div>
         </div>
-    </div>
-    <div class="col-xl-4 col-md-6">
-        <div class="tarjeta tarjeta-accesos">
-            <h2 class="tarjeta-titulo"><i class="bi bi-thermometer-snow"></i> Eficiencia y control ambiental</h2>
-                        <div class="accesos">
-                <a href="<?= e(url('logro', 'desempeno')) ?>"><i class="bi bi-trophy"></i> Desempeño y logros</a>
-                <a href="<?= e(url('sensor')) ?>"><i class="bi bi-thermometer-snow"></i> Monitor de sensores</a>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-4 col-md-12">
-        <div class="tarjeta tarjeta-accesos">
-            <h2 class="tarjeta-titulo"><i class="bi bi-grid-3x3-gap"></i> Gestión del Centro Logístico</h2>
-                        <div class="accesos">
-                <a href="<?= e(url('logistica', 'index', ['tipo' => 'zonas'])) ?>"><i class="bi bi-grid-3x3-gap"></i> Gestionar zonas</a>
-                <a href="<?= e(url('logistica', 'index', ['tipo' => 'ubicaciones'])) ?>"><i class="bi bi-geo-alt"></i> Gestionar ubicaciones</a>
-                <a href="<?= e(url('logistica', 'inventario')) ?>"><i class="bi bi-boxes"></i> Stock por zona</a>
-            </div>
-        </div>
-    </div>
+    <?php } ?>
 </section>
 <?php require RAIZ . '/view/layout/pie.php'; ?>

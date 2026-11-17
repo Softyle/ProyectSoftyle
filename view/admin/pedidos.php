@@ -68,8 +68,21 @@ require RAIZ . '/view/layout/cabecera.php';
                                 </select>
                                 <button class="btn btn-primary btn-sm" type="submit">Asignar</button>
                             </form>
-                        <?php } elseif ($p['estado'] === 'Pendiente') { ?>
-                            <span class="text-success"><i class="bi bi-person-check"></i> Asignado</span>
+                        <?php } elseif (!empty($p['ci_operario']) && in_array($p['estado'], ['Pendiente', 'En Picking'], true)) { ?>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <?php if ($p['estado'] === 'Pendiente') { ?>
+                                    <span class="text-success"><i class="bi bi-person-check"></i> Asignado</span>
+                                <?php } else { ?>
+                                    <span class="text-muted">En preparación</span>
+                                <?php } ?>
+                                <form method="POST" action="<?= e(url('pedido', 'quitar')) ?>"
+                                      onsubmit="return confirm(<?= e(json_encode('¿Quitarle el pedido #' . (int)$p['id'] . ' a ' . $p['operario'] . '? Queda pendiente para asignarlo de nuevo' . ($p['estado'] === 'En Picking' ? ' y lo que ya retiró vuelve al stock.' : '.'), JSON_UNESCAPED_UNICODE)) ?>);">
+                                    <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+                                    <input type="hidden" name="estado" value="<?= e($estado) ?>">
+                                    <input type="hidden" name="pedido_id" value="<?= (int)$p['id'] ?>">
+                                    <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-person-dash"></i> Quitar al operario</button>
+                                </form>
+                            </div>
                         <?php } elseif ($p['estado'] === 'Por validar') { ?>
                             <a class="btn btn-warning btn-sm" href="<?= e(url('pedido', 'validar', ['id' => $p['id']])) ?>"><i class="bi bi-clipboard-check"></i> Validar</a>
                         <?php } elseif ($p['estado'] === 'Completado') { ?>

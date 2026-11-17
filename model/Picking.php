@@ -55,7 +55,7 @@ class Picking extends Modelo
     public function hojaDeRuta($idPedido, $ci)
     {
         return $this->filas("SELECT p.id_pedido AS id, p.estado, pc.usuario AS cliente,
-                                    pr.id_producto, pr.Nombre AS producto, pr.stock_actual, pr.stock_minimo, t.Cantidad, t.recogido,
+                                    pr.id_producto, pr.Nombre AS producto, pr.codigo_barras, IF(pr.foto_oculta, NULL, pr.foto) AS foto, pr.stock_actual, pr.stock_minimo, t.Cantidad, t.recogido,
                                     u.pasillo, u.estante, u.posicion, z.nombre AS zona, z.tipo AS tipo_zona
                              FROM Pedido p
                              INNER JOIN Cliente c ON c.CI = p.ci_cliente
@@ -98,7 +98,7 @@ class Picking extends Modelo
        para que dos confirmaciones simultáneas no descuenten dos veces (usar en transacción). */
     public function itemParaRetiro($idPedido, $idProducto)
     {
-        return $this->fila("SELECT t.Cantidad, t.recogido, pr.Nombre, pr.stock_actual, pr.stock_minimo,
+        return $this->fila("SELECT t.Cantidad, t.recogido, pr.Nombre, pr.codigo_barras, pr.stock_actual, pr.stock_minimo,
                                    u.pasillo, u.estante, u.posicion, z.nombre AS zona
                             FROM Tiene t
                             INNER JOIN Producto pr ON pr.id_producto = t.id_producto
@@ -106,6 +106,12 @@ class Picking extends Modelo
                             INNER JOIN Zona z ON z.id_zona = u.id_zona
                             WHERE t.id_pedido = ? AND t.id_producto = ?
                             FOR UPDATE", 'ii', [$idPedido, $idProducto]);
+    }
+
+    /* El ítem del pedido con ese producto, para saber si ya se recogió (null si el producto no está en el pedido) */
+    public function itemEnPedido($idPedido, $idProducto)
+    {
+        return $this->fila("SELECT t.recogido FROM Tiene t WHERE t.id_pedido = ? AND t.id_producto = ?", 'ii', [$idPedido, $idProducto]);
     }
 
     /* Descuenta el stock solo si alcanza; devuelve false si cambió mientras tanto */

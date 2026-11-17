@@ -21,6 +21,17 @@
 
 date_default_timezone_set('America/Montevideo');
 
+// Publicado con un nombre de dominio (por ejemplo softyle.x10.mx), todo va por HTTPS:
+// las contraseñas viajan cifradas y el navegador presta la cámara (lector y fotos).
+// En la computadora (localhost) o en la VM, que se abren por IP, sigue funcionando por http.
+$host = strtolower(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? '')));
+$esSeguro = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+if (!$esSeguro && $host !== '' && $host !== 'localhost' && !filter_var($host, FILTER_VALIDATE_IP)
+    && !str_ends_with($host, '.localhost') && !str_ends_with($host, '.local') && strpos($host, '.') !== false) {
+    header('Location: https://' . $host . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301);
+    exit;
+}
+
 // Cookie de sesión solo para este sitio y no accesible desde JavaScript.
 // Nombre propio (PICKFLOW) para no chocar con otra cookie PHPSESSID del mismo dominio.
 session_start([
@@ -67,6 +78,11 @@ $rutas = [
     'perfil'      => 'PerfilController',       // perfil del operario
     'historial'   => 'HistorialController',    // historial del operario
     'reporte'     => 'ReporteController',      // reportes avanzados para el cliente (administrador)
+    'recepcion'   => 'RecepcionController',    // recepción de mercadería con lotes y vencimientos
+    'conteo'      => 'ConteoController',       // conteo de inventario por zona
+    'compra'      => 'CompraController',       // reposición y órdenes de compra (administrador)
+    'proveedor'   => 'ProveedorController',    // proveedores (administrador)
+    'aviso'       => 'AvisoController',        // campanita de avisos (AJAX)
 ];
 
 $nombre = $_GET['c'] ?? 'inicio';

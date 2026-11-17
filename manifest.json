@@ -1,0 +1,24 @@
+{
+  "id": "./index.php?c=auth&a=login",
+  "name": "PICKFLOW - Sistema de Picking y Logística",
+  "short_name": "PICKFLOW",
+  "description": "Picking asistido, recepción de mercadería, conteos de inventario y seguimiento de pedidos del depósito.",
+  "lang": "es-UY",
+  "start_url": "./index.php?c=auth&a=login",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#142544",
+  "theme_color": "#142544",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "img/app/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/app/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "img/app/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Mis pedidos", "short_name": "Pedidos", "url": "./index.php?c=picking", "icons": [{ "src": "img/app/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Recepción de mercadería", "short_name": "Recepción", "url": "./index.php?c=recepcion&a=nueva", "icons": [{ "src": "img/app/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Conteos de inventario", "short_name": "Conteos", "url": "./index.php?c=conteo", "icons": [{ "src": "img/app/icono-192.png", "sizes": "192x192" }] }
+  ]
+}

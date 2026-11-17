@@ -4,7 +4,11 @@
    Panel "Mis pedidos", detalle del pedido y hoja de ruta.
    Cada retiro se confirma por AJAX (jQuery) sin recargar:
 
-   POST confirmar -> valida estantería/nivel y cantidad,
+   GET  escanear  -> qué producto es el código de barras leído
+                     y dónde está guardado
+   POST confirmar -> doble verificación: el código de barras
+                     (producto correcto) y la estantería/nivel
+                     (lugar correcto); valida la cantidad,
                      descuenta el stock y registra el retiro
    POST finalizar -> todos los ítems recogidos: el pedido
                      pasa a "Por validar" (lo revisa el admin)
@@ -13,7 +17,7 @@
 ===================================================== */
 class PickingController extends Controlador
 {
-    const ACCIONES_AJAX = ['confirmar', 'finalizar', 'estado'];
+    const ACCIONES_AJAX = ['confirmar', 'finalizar', 'estado', 'escanear'];
 
     public function __construct()
     {
@@ -68,6 +72,8 @@ class PickingController extends Controlador
             'items' => $items,
             'cliente' => $items[0]['cliente'],
             'documentos' => (new Documento())->porProductos(array_column($items, 'id_producto')),
+            // Lote que hay que sacar primero (el que vence antes) y si hay mercadería vencida
+            'lotes' => (new Lote())->aRetirar(array_column($items, 'id_producto')),
             'totalItems' => count($items),
             'recogidos' => count(array_filter($items, fn($x) => (bool)$x['recogido'])),
             'totalUnidades' => array_sum(array_map(fn($x) => (int)$x['Cantidad'], $items)),
@@ -83,6 +89,60 @@ class PickingController extends Controlador
         $this->json(200, ['ok' => true, 'estado' => $estado, 'progreso' => $modelo->progreso($idPedido), 'items' => $modelo->estadoItems($idPedido)]);
     }
 
+    /* AJAX GET: el operario leyó un código de barras. Responde qué producto es, dónde se guarda
+       y si es el del paso que está preparando ($_GET['id_producto'], opcional). Solo consulta: no
+       registra nada; el error queda registrado recién si confirma el retiro con el producto equivocado. */
+    public function escanear()
+    {
+        $idPedido = (int)($_GET['id_pedido'] ?? 0);
+        $idEsperado = (int)($_GET['id_producto'] ?? 0);
+        $codigo = CodigoBarras::limpiar($_GET['codigo'] ?? '');
+        $modelo = new Picking();
+        $this->estadoPropio($modelo, $idPedido);
+        if ($codigo === '') {
+            $this->json(422, ['ok' => false, 'mensaje' => 'No se leyó ningún código. Probá de nuevo.']);
+        }
+
+        $producto = (new Producto())->buscarPorCodigoBarras($codigo);
+        if (!$producto) {
+            // No está en el depósito: se busca igual en las bases públicas para decirle al operario qué tiene en la mano
+            $externo = CodigoBarras::valido($codigo) ? CatalogoExterno::buscar($codigo) : null;
+            $origen = PrefijoGS1::frase($codigo);
+            $this->json(404, ['ok' => false, 'codigo' => $codigo,
+                'mensaje' => 'El código ' . $codigo . ' no corresponde a ningún producto del depósito.'
+                    . ($externo ? ' Por el código es ' . $externo['nombre'] . '.' : '')
+                    . ($origen ? ' ' . $origen : '')
+                    . ' Revisá que hayas leído la etiqueta correcta o avisale al administrador para que lo cargue.']);
+        }
+
+        $idProducto = (int)$producto['id_producto'];
+        $ubicacion = $producto['zona'] . ', ' . $producto['pasillo'] . '-' . $producto['estante'] . '-' . $producto['posicion'];
+        $item = $modelo->itemEnPedido($idPedido, $idProducto);
+        $esEste = $idEsperado > 0 && $idEsperado === $idProducto;
+
+        if ($esEste) {
+            $mensaje = 'Producto correcto: es ' . $producto['Nombre'] . '. Se guarda en ' . $ubicacion . '.';
+        } elseif ($item) {
+            $mensaje = 'Esto es ' . $producto['Nombre'] . ' (' . $ubicacion . '). Está en el pedido'
+                . ($idEsperado > 0 ? ', pero en otro paso' : '')
+                . ($item['recogido'] ? ' y ya lo recogiste.' : '.');
+        } else {
+            $mensaje = 'Esto es ' . $producto['Nombre'] . ', que se guarda en ' . $ubicacion . '. No está en este pedido: devolvelo a su lugar.';
+        }
+
+        $this->json(200, [
+            'ok' => true,
+            'codigo' => $codigo,
+            'id_producto' => $idProducto,
+            'nombre' => $producto['Nombre'],
+            'ubicacion' => $ubicacion,
+            'en_pedido' => (bool)$item,
+            'recogido' => $item ? (bool)$item['recogido'] : false,
+            'es_este' => $esEste,
+            'mensaje' => $mensaje,
+        ]);
+    }
+
     /* AJAX POST: confirmación del retiro de un producto */
     public function confirmar()
     {
@@ -90,6 +150,7 @@ class PickingController extends Controlador
         $ci = $this->ciUsuario();
         $idPedido = (int)($_POST['id_pedido'] ?? 0);
         $idProducto = (int)($_POST['id_producto'] ?? 0);
+        $codigoLeido = CodigoBarras::limpiar($_POST['codigo'] ?? '');
         $ubicacionIngresada = trim((string)($_POST['ubicacion'] ?? ''));
         $cantidad = filter_var($_POST['cantidad'] ?? null, FILTER_VALIDATE_INT);
         $modelo = new Picking();
@@ -117,21 +178,37 @@ class PickingController extends Controlador
             }
 
             $ubicacionReal = $item['pasillo'] . '-' . $item['estante'] . '-' . $item['posicion'];
-            // 1) ¿Está en la estantería y el nivel correctos?
+            // 1) ¿Es el producto correcto? (doble verificación: el código de barras del paquete)
+            if ((string)$item['codigo_barras'] !== '') {
+                if ($codigoLeido === '') {
+                    $modelo->deshacerTransaccion();
+                    $this->json(422, ['ok' => false, 'campo' => 'codigo',
+                        'mensaje' => 'Primero escaneá el código de barras del producto para confirmar que es el correcto.']);
+                }
+                if ($codigoLeido !== (string)$item['codigo_barras']) {
+                    $movimientos->registrarError($ci, $idProducto, $ubicacionReal, 'Error de producto', $idPedido, $cantidad);
+                    $modelo->confirmarTransaccion();
+                    $leido = (new Producto())->buscarPorCodigoBarras($codigoLeido);
+                    $this->json(422, ['ok' => false, 'campo' => 'codigo',
+                        'mensaje' => 'Producto equivocado: ' . ($leido ? 'leíste ' . $leido['Nombre'] : 'el código ' . $codigoLeido . ' no es de ningún producto')
+                            . ', pero este paso es ' . $item['Nombre'] . '.']);
+                }
+            }
+            // 2) ¿Está en la estantería y el nivel correctos?
             if (self::normalizarUbicacion($ubicacionIngresada) !== self::normalizarUbicacion($ubicacionReal)) {
                 $movimientos->registrarError($ci, $idProducto, $ubicacionReal, 'Error de ubicación', $idPedido, $cantidad);
                 $modelo->confirmarTransaccion();
                 $this->json(422, ['ok' => false, 'campo' => 'ubicacion',
                     'mensaje' => 'Ubicación incorrecta: confirmaste "' . $ubicacionIngresada . '", pero el producto está en ' . $item['zona'] . ', ' . $ubicacionReal . '.']);
             }
-            // 2) ¿Quiere retirar más de lo que hay en stock?
+            // 3) ¿Quiere retirar más de lo que hay en stock?
             if ($cantidad > (int)$item['stock_actual']) {
                 $movimientos->registrarError($ci, $idProducto, $ubicacionReal, 'Error de cantidad', $idPedido, $cantidad);
                 $modelo->confirmarTransaccion();
                 $this->json(409, ['ok' => false, 'campo' => 'cantidad',
                     'mensaje' => 'No hay stock suficiente: querés retirar ' . $cantidad . ' y quedan ' . (int)$item['stock_actual'] . ' unidades. Avisale al administrador.']);
             }
-            // 3) ¿Coincide con lo solicitado?
+            // 4) ¿Coincide con lo solicitado?
             if ($cantidad !== (int)$item['Cantidad']) {
                 $movimientos->registrarError($ci, $idProducto, $ubicacionReal, 'Error de cantidad', $idPedido, $cantidad);
                 $modelo->confirmarTransaccion();
@@ -144,6 +221,8 @@ class PickingController extends Controlador
                 $modelo->deshacerTransaccion();
                 $this->json(409, ['ok' => false, 'campo' => 'cantidad', 'mensaje' => 'El stock cambió mientras confirmabas. Volvé a intentarlo.']);
             }
+            // Sale primero el lote que vence antes (FEFO)
+            (new Lote())->consumir($idProducto, $cantidad, (int)$item['stock_actual']);
             try {
                 $movimientos->registrar($ci, $idProducto, $ubicacionReal, 'Retiro', $idPedido, $cantidad);
             } catch (mysqli_sql_exception $ex) {

@@ -30,22 +30,31 @@ class AuthController extends Controlador
         if ($usuario === '' || $password === '') {
             return 'Completá usuario y contraseña.';
         }
-        $modelo = new Usuario();
-        $datos = $modelo->buscarPorUsuario($usuario);
-        if (!$datos) {
-            return 'Usuario o contraseña incorrectos.';
+        // Freno a quien prueba contraseñas una tras otra (ver model/IntentoLogin.php)
+        $intentos = new IntentoLogin();
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        $espera = $intentos->minutosDeEspera($usuario, $ip);
+        if ($espera > 0) {
+            return 'Demasiados intentos fallidos. Esperá ' . $espera . ' minuto' . ($espera === 1 ? '' : 's') . ' y volvé a intentar.';
         }
 
-        $correcta = password_verify($password, $datos['password']) || hash_equals((string)$datos['password'], $password);
+        $modelo = new Usuario();
+        $datos = $modelo->buscarPorUsuario($usuario);
+        $correcta = $datos && (password_verify($password, $datos['password']) || hash_equals((string)$datos['password'], $password));
+        if (!$correcta) {
+            // Mismo mensaje si el usuario no existe o la contraseña está mal: no se revela qué usuarios hay
+            $intentos->registrarFallo($usuario, $ip);
+            return 'Usuario o contraseña incorrectos.';
+        }
+        $intentos->limpiar($usuario, $ip);
+
         $rol = strtolower((string)$datos['Rol']);
         if ($rol === 'administrador') {
             $rol = 'admin';
         }
+        // Recién con la contraseña correcta se avisa si el operario está inactivo
         if ($rol === 'operario' && $datos['Estado'] !== null && strtolower($datos['Estado']) !== 'activo') {
             return 'Este usuario está inactivo.';
-        }
-        if (!$correcta) {
-            return 'Usuario o contraseña incorrectos.';
         }
         if (!in_array($rol, ['admin', 'operario'], true)) {
             return 'Este usuario no tiene acceso al sistema.';

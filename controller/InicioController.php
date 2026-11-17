@@ -8,6 +8,9 @@ class InicioController extends Controlador
 {
     const ARCHIVO_MENSAJES = 'uploads/mensajes/mensajes.txt'; // carpeta sin acceso desde el navegador
 
+    // Casilla del equipo que recibe los mensajes de soporte (la misma de la nota de conformación)
+    const CORREO_SOPORTE = 'softyletalleresdonbosco@gmail.com';
+
     const IDIOMAS = ['es', 'en'];
 
     /* Idioma del sitio público: ?lang=en o ?lang=es lo cambia y queda guardado en la sesión */
@@ -77,10 +80,43 @@ class InicioController extends Controlador
                 . "========================================\n\n";
             if (file_put_contents(RAIZ . '/' . self::ARCHIVO_MENSAJES, $registro, FILE_APPEND | LOCK_EX) === false) {
                 $errores[] = 'err_guardar';
+            } else {
+                // El archivo queda como respaldo; además se avisa por correo al equipo
+                $this->enviarCorreoSoporte($nombre, $correo, $mensaje);
             }
         }
 
         $this->vista('publico/contacto', ['idioma' => $this->idioma(), 'errores' => $errores, 'nombre' => $nombre, 'correo' => $correo]);
+    }
+
+    /* Manda el mensaje de soporte a la casilla del equipo con mail() del servidor.
+       "Responder" contesta directo a quien escribió (Reply-To). Si el servidor no
+       puede enviar correo (por ejemplo WAMP sin servidor de correo), queda en el
+       registro de errores y el mensaje igual está guardado en el archivo. */
+    private function enviarCorreoSoporte($nombre, $correo, $mensaje)
+    {
+        $nombreLimpio = trim(preg_replace('/[\r\n]+/', ' ', $nombre)); // evita que se inyecten cabeceras
+        $dominio = preg_replace('/^www\./', '', preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? 'localhost'));
+        $asunto = mb_encode_mimeheader('PICKFLOW soporte: mensaje de ' . $nombreLimpio, 'UTF-8');
+        $cuerpo = "Nuevo mensaje desde el formulario de soporte de PICKFLOW.\n\n"
+            . 'Fecha: ' . date('d/m/Y H:i') . "\n"
+            . 'Nombre: ' . $nombreLimpio . "\n"
+            . 'Correo: ' . $correo . "\n\n"
+            . "Mensaje:\n" . $mensaje . "\n\n"
+            . "Para responder, usá \"Responder\": la respuesta le llega a " . $correo . ".\n";
+        $cabeceras = 'From: PICKFLOW <noreply@' . $dominio . ">\r\n"
+            . 'Reply-To: ' . $correo . "\r\n"
+            . "MIME-Version: 1.0\r\n"
+            . "Content-Type: text/plain; charset=UTF-8\r\n"
+            . "Content-Transfer-Encoding: 8bit\r\n";
+
+        // Algunos hostings no aceptan el remitente con -f: en ese caso se reintenta sin él
+        $enviado = @mail(self::CORREO_SOPORTE, $asunto, $cuerpo, $cabeceras, '-f noreply@' . $dominio)
+            || @mail(self::CORREO_SOPORTE, $asunto, $cuerpo, $cabeceras);
+        if (!$enviado) {
+            error_log('PICKFLOW soporte: no se pudo enviar el correo a ' . self::CORREO_SOPORTE . ' (queda guardado en ' . self::ARCHIVO_MENSAJES . ')');
+        }
+        return $enviado;
     }
 
     /* Página no encontrada (rutas o acciones que no existen) */

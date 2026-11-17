@@ -127,12 +127,12 @@ return [
     'equipo_contacto' => 'CONTACT',
     'equipo_ubicacion' => 'LOCATION',
     'equipo_redes' => 'TEAM LINKS',
-    'equipo_redes_aria' => 'Pickflow team on %s',
+    'equipo_redes_aria' => 'Softyle team on %s',
     'mapa_titulo' => 'Map: location of %s',
 
     // Pie
     'pie_lema' => 'Assisted picking',
-    'pie_texto' => 'Logistics organization project',
+    'pie_texto' => 'A Softyle product · Logistics organization project',
 
     // Resultado del formulario de contacto
     'res_titulo_error' => 'Error',

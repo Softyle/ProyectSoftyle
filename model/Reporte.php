@@ -2,7 +2,8 @@
 /* =====================================================
    MODELO - REPORTES PARA EL CLIENTE
    Diez consultas avanzadas sobre el depósito (tercera entrega
-   y entrega final). Cada reporte guarda su SQL para que la
+   y entrega final) y siete de abastecimiento (recepción, lotes,
+   conteos y proveedores). Cada reporte guarda su SQL para que la
    pantalla pueda mostrar la consulta que se ejecutó.
    Usan JOIN, subconsultas, NOT EXISTS, agregación condicional,
    la vista Vista_Estadisticas_Operario y la función RANK().
@@ -90,12 +91,13 @@ ORDER BY FIELD(pe.estado, 'Pendiente', 'En Picking', 'Por validar', 'Completado'
         ],
         'errores' => [
             'Errores de picking por zona',
-            'Retiros correctos frente a errores de ubicación y de cantidad en cada zona: muestra dónde se equivocan más los operarios.',
+            'Retiros correctos frente a errores de ubicación, de cantidad y de producto (código de barras equivocado) en cada zona: muestra dónde se equivocan más los operarios.',
             'bi-bullseye',
             "SELECT z.nombre AS `Zona`,
        SUM(r.Tipo_Registro = 'Retiro') AS `Retiros correctos`,
        SUM(r.Tipo_Registro = 'Error de ubicación') AS `Errores de ubicación`,
        SUM(r.Tipo_Registro = 'Error de cantidad') AS `Errores de cantidad`,
+       SUM(r.Tipo_Registro = 'Error de producto') AS `Errores de producto`,
        CONCAT(ROUND(100 * SUM(r.Tipo_Registro = 'Retiro') / COUNT(*), 1), ' %') AS `Precisión`
 FROM Registra r
 INNER JOIN Producto p ON p.id_producto = r.id_producto
@@ -166,7 +168,129 @@ INNER JOIN Zona z ON z.id_zona = u.id_zona
 WHERE NOT EXISTS (SELECT 1 FROM Tiene t WHERE t.id_producto = p.id_producto)
 ORDER BY p.stock_actual DESC, p.Nombre",
         ],
+
+        /* ---------- Abastecimiento: recepción, lotes, conteos y proveedores ---------- */
+        'rotacion' => [
+            'Productos que más se mueven',
+            'Los 15 productos con más unidades retiradas en los últimos 30 días (descontando devoluciones), cuánto sale por día y para cuántos días alcanza el stock actual.',
+            'bi-speedometer',
+            "SELECT p.Nombre AS `Producto`, c.nombre AS `Categoría`,
+       SUM(CASE r.Tipo_Registro WHEN 'Retiro' THEN r.cantidad ELSE -r.cantidad END) AS `Unidades retiradas`,
+       ROUND(SUM(CASE r.Tipo_Registro WHEN 'Retiro' THEN r.cantidad ELSE -r.cantidad END) / 30, 1) AS `Por día`,
+       p.stock_actual AS `Stock`,
+       COALESCE(CONCAT(FLOOR(p.stock_actual / NULLIF(SUM(CASE r.Tipo_Registro WHEN 'Retiro' THEN r.cantidad ELSE -r.cantidad END) / 30, 0)), ' días'), '—') AS `Alcanza para`
+FROM Registra r
+INNER JOIN Producto p ON p.id_producto = r.id_producto
+INNER JOIN Categoria c ON c.id_categoria = p.id_categoria
+WHERE r.Tipo_Registro IN ('Retiro', 'Devolución') AND r.fecha_hora >= CURDATE() - INTERVAL 30 DAY
+GROUP BY p.id_producto, p.Nombre, c.nombre, p.stock_actual
+HAVING `Unidades retiradas` > 0
+ORDER BY `Unidades retiradas` DESC
+LIMIT 15",
+        ],
+        'recepciones-proveedor' => [
+            'Recepciones por proveedor',
+            'Mercadería recibida en los últimos 90 días agrupada por proveedor: cuántas veces entró, cuántos productos distintos y cuántas unidades.',
+            'bi-box-arrow-in-down',
+            "SELECT COALESCE(v.nombre, 'Sin proveedor') AS `Proveedor`,
+       COUNT(DISTINCT rm.id_recepcion) AS `Recepciones`,
+       COUNT(DISTINCT l.id_producto) AS `Productos distintos`,
+       COALESCE(SUM(l.cantidad_recibida), 0) AS `Unidades recibidas`,
+       MAX(rm.fecha) AS `Última recepción`
+FROM Recepcion_Mercaderia rm
+LEFT JOIN Proveedor v ON v.id_proveedor = rm.id_proveedor
+LEFT JOIN Lote l ON l.id_recepcion = rm.id_recepcion
+WHERE rm.fecha >= CURDATE() - INTERVAL 90 DAY
+GROUP BY rm.id_proveedor, v.nombre
+ORDER BY `Unidades recibidas` DESC",
+        ],
+        'cumplimiento-ordenes' => [
+            'Cumplimiento de las órdenes de compra',
+            'Por proveedor: órdenes recibidas, parciales y pendientes, las que ya pasaron su fecha esperada y qué porcentaje de lo pedido llegó (sin contar las canceladas).',
+            'bi-receipt',
+            "SELECT v.nombre AS `Proveedor`,
+       COUNT(*) AS `Órdenes`,
+       SUM(o.estado = 'Recibida') AS `Recibidas`,
+       SUM(o.estado = 'Parcial') AS `Parciales`,
+       SUM(o.estado = 'Pendiente') AS `Pendientes`,
+       SUM(o.estado IN ('Pendiente', 'Parcial') AND o.fecha_esperada < CURDATE()) AS `Atrasadas`,
+       CONCAT(ROUND(100 * SUM(d.recibido) / NULLIF(SUM(d.pedido), 0), 1), ' %') AS `Unidades que llegaron`
+FROM Orden_Compra o
+INNER JOIN Proveedor v ON v.id_proveedor = o.id_proveedor
+LEFT JOIN (SELECT id_orden, SUM(cantidad_pedida) AS pedido, SUM(LEAST(cantidad_recibida, cantidad_pedida)) AS recibido
+           FROM Orden_Compra_Detalle GROUP BY id_orden) d ON d.id_orden = o.id_orden
+WHERE o.estado <> 'Cancelada'
+GROUP BY v.id_proveedor, v.nombre
+ORDER BY `Órdenes` DESC, v.nombre",
+        ],
+        'diferencias-conteo' => [
+            'Diferencias en los conteos de inventario',
+            'Cada conteo cerrado: cuántos productos se contaron, cuántos no coincidían con el sistema, las unidades de más y de menos, y la exactitud del inventario.',
+            'bi-clipboard-data',
+            "SELECT c.id_conteo AS `Conteo`, z.nombre AS `Zona`, c.fecha_cierre AS `Cerrado`,
+       COUNT(d.cantidad_contada) AS `Productos contados`,
+       SUM(d.cantidad_contada <> d.stock_sistema) AS `Con diferencia`,
+       SUM(GREATEST(d.cantidad_contada - d.stock_sistema, 0)) AS `Unidades de más`,
+       SUM(GREATEST(d.stock_sistema - d.cantidad_contada, 0)) AS `Unidades de menos`,
+       CONCAT(ROUND(100 * SUM(d.cantidad_contada = d.stock_sistema) / NULLIF(COUNT(d.cantidad_contada), 0), 1), ' %') AS `Exactitud`
+FROM Conteo c
+INNER JOIN Zona z ON z.id_zona = c.id_zona
+INNER JOIN Conteo_Detalle d ON d.id_conteo = c.id_conteo
+WHERE c.estado = 'Cerrado'
+GROUP BY c.id_conteo, z.nombre, c.fecha_cierre
+ORDER BY c.fecha_cierre DESC",
+        ],
+        'lotes-por-vencer' => [
+            'Lotes por vencer',
+            'Lotes con mercadería que vencen en los próximos 30 días (o ya vencieron), del más urgente al menos urgente.',
+            'bi-calendar2-week',
+            "SELECT p.Nombre AS `Producto`, COALESCE(l.codigo_lote, '—') AS `Lote`,
+       l.fecha_vencimiento AS `Vence`,
+       CASE WHEN l.fecha_vencimiento < CURDATE() THEN 'Vencido'
+            ELSE CONCAT(DATEDIFF(l.fecha_vencimiento, CURDATE()), ' días') END AS `Faltan`,
+       l.cantidad_actual AS `Unidades`,
+       CONCAT(z.nombre, ' / ', u.pasillo, '-', u.estante, '-', u.posicion) AS `Ubicación`
+FROM Lote l
+INNER JOIN Producto p ON p.id_producto = l.id_producto
+INNER JOIN Ubicacion u ON u.id_ubicacion = p.id_ubicacion
+INNER JOIN Zona z ON z.id_zona = u.id_zona
+WHERE l.cantidad_actual > 0 AND l.fecha_vencimiento IS NOT NULL
+  AND l.fecha_vencimiento <= CURDATE() + INTERVAL 30 DAY
+ORDER BY l.fecha_vencimiento, p.Nombre",
+        ],
+        'bajas-vencimiento' => [
+            'Mercadería dada de baja por vencimiento',
+            'Lo que se sacó del stock por estar vencido en los últimos 90 días: qué producto, cuántas unidades y quién lo dio de baja.',
+            'bi-trash3',
+            "SELECT m.fecha AS `Fecha`, p.Nombre AS `Producto`,
+       ABS(m.cantidad) AS `Unidades`,
+       pe.usuario AS `Dio de baja`,
+       m.detalle AS `Detalle`
+FROM Movimiento_Stock m
+INNER JOIN Producto p ON p.id_producto = m.id_producto
+INNER JOIN Persona pe ON pe.CI = m.ci_persona
+WHERE m.tipo = 'Baja por vencimiento' AND m.fecha >= CURDATE() - INTERVAL 90 DAY
+ORDER BY m.fecha DESC",
+        ],
+        'ajustes-stock' => [
+            'Cambios de stock por motivo',
+            'Todo lo que cambió el stock fuera del picking en los últimos 30 días (recepciones, conteos, ajustes manuales y bajas), con las unidades que entraron y salieron.',
+            'bi-arrow-left-right',
+            "SELECT m.tipo AS `Motivo`,
+       COUNT(*) AS `Movimientos`,
+       COUNT(DISTINCT m.id_producto) AS `Productos`,
+       SUM(GREATEST(m.cantidad, 0)) AS `Unidades que entraron`,
+       SUM(GREATEST(-m.cantidad, 0)) AS `Unidades que salieron`
+FROM Movimiento_Stock m
+WHERE m.fecha >= CURDATE() - INTERVAL 30 DAY
+GROUP BY m.tipo
+ORDER BY `Movimientos` DESC",
+        ],
     ];
+
+    /* Reportes que van en el grupo "Abastecimiento"; el resto es "Pedidos y depósito" */
+    const ABASTECIMIENTO = ['rotacion', 'recepciones-proveedor', 'cumplimiento-ordenes', 'diferencias-conteo',
+                            'lotes-por-vencer', 'bajas-vencimiento', 'ajustes-stock'];
 
     /* Ejecuta todos los reportes. Si uno falla, los demás se muestran igual. */
     public function todos()
@@ -174,6 +298,7 @@ ORDER BY p.stock_actual DESC, p.Nombre",
         $reportes = [];
         foreach (self::REPORTES as $clave => [$titulo, $descripcion, $icono, $sql]) {
             $reporte = ['clave' => $clave, 'titulo' => $titulo, 'descripcion' => $descripcion,
+                        'grupo' => in_array($clave, self::ABASTECIMIENTO, true) ? 'Abastecimiento' : 'Pedidos y depósito',
                         'icono' => $icono, 'sql' => $sql, 'filas' => [], 'error' => ''];
             try {
                 $reporte['filas'] = $this->filas($sql);
